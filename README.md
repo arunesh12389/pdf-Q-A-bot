@@ -30,7 +30,7 @@ NoteMate lets you upload a PDF (like lecture notes or manuals), ask questions, a
 
 ## Notes
 - Large PDFs may take longer to process
-- Only one PDF at a time is supported in this version
+- Only one question at a time is supported in this version
 
 ---
 MIT License 
