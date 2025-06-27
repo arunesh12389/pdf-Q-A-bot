@@ -27,11 +27,6 @@ NoteMate lets you upload a PDF (like lecture notes or manuals), ask questions, a
    streamlit run app.py
    ```
 
-## Usage
-- Upload a PDF file using the web interface
-- Wait for processing
-- Ask questions about the content
-- Get answers powered by Groq LLMs (e.g., Mixtral-8x7b-32768)
 
 ## Notes
 - Large PDFs may take longer to process
