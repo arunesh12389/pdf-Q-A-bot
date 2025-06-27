@@ -1,12 +1,8 @@
+
 # NoteMate – Your AI PDF Companion (Groq Edition)
 
 NoteMate lets you upload a PDF (like lecture notes or manuals), ask questions, and get AI-powered answers based on the document content using Groq's LLMs.
 
-## Features
-- Upload and process PDF files
-- Extracts and chunks content
-- Creates a searchable vector database
-- Ask questions and get relevant answers using Groq LLM
 
 ## Tools Used
 - **UI:** Streamlit
