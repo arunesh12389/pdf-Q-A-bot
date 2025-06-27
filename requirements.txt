@@ -1,8 +1,12 @@
 streamlit
 openai
-langchain
-faiss-cpu
 PyMuPDF
-python-dotenv
 tqdm 
+langchain
+langchain-community
+langchain-groq
+pymupdf
+faiss-cpu
 sentence-transformers
+python-dotenv
+pydantic
