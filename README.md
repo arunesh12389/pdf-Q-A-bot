@@ -1,12 +1,12 @@
 
-# NoteMate – Your AI PDF Companion (Groq Edition)
+# Askly - Read less, know more.
 
-NoteMate lets you upload a PDF (like lecture notes or manuals), ask questions, and get AI-powered answers based on the document content using Groq's LLMs.
+Askly lets you upload a PDF (like lecture notes or manuals), ask questions, and get AI-powered answers based on the document content using Groq's LLMs.
 
 
 ## Tools Used
 - **UI:** Streamlit
-- **AI Model:** Groq API (e.g., Mixtral-8x7b-32768)
+- **AI Model:** Groq API (e.g., llama-3.3-70b-versatile)
 - **PDF Processing:** PyMuPDF (fitz)
 - **Vector DB:** FAISS
 - **LangChain:** For chaining workflow
