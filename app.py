@@ -1,3 +1,4 @@
+# lmntix_app.py
 import streamlit as st
 from utils import extract_text_from_pdf, chunk_text, create_vector_store
 from langchain_groq import ChatGroq
@@ -8,6 +9,7 @@ from dotenv import load_dotenv
 from pydantic import SecretStr
 import time
 import numpy as np
+from typing import List
 
 load_dotenv()
 api_key = os.getenv("GROQ_API_KEY")
@@ -15,104 +17,311 @@ if not api_key:
     raise ValueError("GROQ_API_KEY not set in your .env file.")
 GROQ_API_KEY = SecretStr(api_key)
 
-st.title("NoteMate – Your AI PDF Companion (Groq Edition)")
+# ---------- Page config ----------
+st.set_page_config(
+    page_title="Askly – Knowledge-based Search Engine",
+    page_icon="🛰️",
+    layout="wide",
+    initial_sidebar_state="expanded",
+)
 
-# Initialize chat history and stats in session state
-if 'chat_history' not in st.session_state:
-    st.session_state['chat_history'] = []
-if 'is_generating' not in st.session_state:
-    st.session_state['is_generating'] = False
-if 'timings' not in st.session_state:
-    st.session_state['timings'] = []
+# ---------- Custom dark futuristic styles ----------
+st.markdown(
+    """
+    <style>
+    /* Base */
+    html, body, [class*="stApp"], .main {
+        background: linear-gradient(180deg,#04060a 0%, #0b0d12 40%, #071026 100%);
+        color: #cbd5e1;
+        font-family: 'Poppins', system-ui, -apple-system, "Segoe UI", Roboto, "Helvetica Neue", Arial;
+    }
 
-# Upload and process PDF
-uploaded_file = st.file_uploader("Upload your PDF", type="pdf")
-if uploaded_file:
-    with tempfile.NamedTemporaryFile(delete=False, suffix=".pdf") as tmp_file:
-        tmp_file.write(uploaded_file.read())
-        pdf_path = tmp_file.name
+    /* Neon header */
+    .lm-header {
+        background: linear-gradient(90deg, rgba(103,58,183,0.95), rgba(33,150,243,0.9));
+        -webkit-background-clip: text;
+        -webkit-text-fill-color: transparent;
+        font-weight: 700;
+    }
 
-    st.info("Extracting text from PDF...")
-    text = extract_text_from_pdf(pdf_path)
-    st.success("Text extracted!")
+    /* Cards */
+    .lm-card {
+        background: linear-gradient(180deg, rgba(255,255,255,0.02), rgba(255,255,255,0.01));
+        border: 1px solid rgba(255,255,255,0.04);
+        border-radius: 16px;
+        padding: 18px;
+        box-shadow: 0 6px 24px rgba(2,6,23,0.6), inset 0 1px 0 rgba(255,255,255,0.01);
+    }
 
-    st.info("Chunking text...")
-    chunks = chunk_text(text)
+    .lm-card .section-title {
+        font-size: 18px;
+        font-weight: 600;
+        color: #e6eef8;
+        margin-bottom: 8px;
+    }
+
+    /* Upload area */
+    .upload-area {
+        border: 1px dashed rgba(255,255,255,0.06);
+        border-radius: 12px;
+        padding: 12px;
+        text-align: center;
+    }
+
+    /* Buttons */
+    .stButton>button {
+        border-radius: 12px;
+        padding: 8px 14px;
+        font-weight: 600;
+        box-shadow: 0 6px 18px rgba(15, 34, 76, 0.45);
+    }
+
+    /* Chat bubble */
+    .lm-bubble-user {
+        background: linear-gradient(90deg, rgba(255,255,255,0.03), rgba(255,255,255,0.02));
+        color: #9fb7ff;
+        padding: 12px;
+        border-radius: 12px;
+        border-left: 4px solid rgba(33,150,243,0.6);
+    }
+    .lm-bubble-assistant {
+        background: linear-gradient(90deg, rgba(255,255,255,0.02), rgba(255,255,255,0.01));
+        color: #b7f7d6;
+        padding: 12px;
+        border-radius: 12px;
+        border-left: 4px solid rgba(103,58,183,0.6);
+    }
+
+    /* tiny copy feedback */
+    .copy-feedback {
+        color: #9be7ff;
+        opacity: 0;
+        transition: opacity .25s ease-in-out;
+    }
+
+    /* small metadata */
+    .muted {
+        color: rgba(255,255,255,0.45);
+        font-size: 12px;
+    }
+
+    /* make file list readable */
+    .file-name {
+        color: #cfe9ff;
+        font-weight: 600;
+    }
+
+    </style>
+    """,
+    unsafe_allow_html=True,
+)
+
+# ---------- Header ----------
+col1, col2 = st.columns([8, 2])
+with col1:
+    st.markdown("<h1 class='lm-header'>Askly – Knowledge-based Search Engine</h1>", unsafe_allow_html=True)
+    st.markdown("<div class='muted'>Upload documents, build a vector store, and ask Askly questions. Dark Futuristic UI.</div>", unsafe_allow_html=True)
+with col2:
+    # Simple sidebar-like controls but in header
+    theme = st.selectbox("Theme preset", ["Dark Futuristic"], disabled=True)
+    st.markdown("<div class='muted' style='text-align:right;'>Status: <b style='color:#9be7ff;'>Ready</b></div>", unsafe_allow_html=True)
+
+st.markdown("---")
+
+# ---------- Sidebar: quick stats & controls ----------
+with st.sidebar:
+    st.markdown("### ⚙️ Askly Controls")
+    st.write("Upload multiple PDFs, rebuild the index, and manage memory.")
+    rebuild_btn = st.button("🔁 Rebuild index")
+    clear_sessions = st.button("🗑️ Clear session")
+
+if clear_sessions:
+    for k in list(st.session_state.keys()):
+        st.session_state.pop(k, None)
+    st.experimental_rerun()
+
+# ---------- Initialize session state ----------
+if "chat_history" not in st.session_state:
+    st.session_state["chat_history"] = []
+if "is_generating" not in st.session_state:
+    st.session_state["is_generating"] = False
+if "timings" not in st.session_state:
+    st.session_state["timings"] = []
+if "vector_store" not in st.session_state:
+    st.session_state["vector_store"] = None
+if "uploaded_files" not in st.session_state:
+    st.session_state["uploaded_files"] = []
+
+# ---------- Upload & Processing Card ----------
+st.markdown("<div class='lm-card'>", unsafe_allow_html=True)
+st.markdown("<div class='section-title'>📁 Upload PDFs (multiple)</div>", unsafe_allow_html=True)
+uploaded_files = st.file_uploader(
+    "Drop PDFs here or click to browse",
+    type=["pdf"],
+    accept_multiple_files=True,
+    help="You can upload multiple PDF files. Askly will merge the extracted text into one index."
+)
+
+col_upload_1, col_upload_2 = st.columns([3,1])
+with col_upload_1:
+    if uploaded_files:
+        st.markdown("<div class='upload-area'>", unsafe_allow_html=True)
+        st.markdown("<b>Files to process:</b>", unsafe_allow_html=True)
+        for f in uploaded_files:
+            st.markdown(f"<div class='file-name'>• {f.name} — <span class='muted'>{f.size/1024:.1f} KB</span></div>", unsafe_allow_html=True)
+        st.markdown("</div>", unsafe_allow_html=True)
+    else:
+        st.info("No files selected yet. Use the uploader above to add PDFs.")
+with col_upload_2:
+    process_btn = st.button("Search")
+st.markdown("</div>", unsafe_allow_html=True)
+
+# ---------- Process uploaded files ----------
+def process_pdf_files(file_objs: List[st.runtime.uploaded_file_manager.UploadedFile]):
+    """Save uploaded st files to temp files, extract text, chunk, and create vector store."""
+    combined_texts = []
+    file_count = len(file_objs)
+    progress = st.progress(0)
+    for idx, f in enumerate(file_objs):
+        progress_text = f"Extracting text from {f.name} ({idx+1}/{file_count})..."
+        st.info(progress_text)
+        with tempfile.NamedTemporaryFile(delete=False, suffix=".pdf") as tmp:
+            tmp.write(f.read())
+            tmp_path = tmp.name
+        extracted = extract_text_from_pdf(tmp_path)
+        combined_texts.append((f.name, extracted))
+        # small progress step
+        progress.progress(int(((idx+1)/file_count)*100))
+        # clean up temp file
+        try:
+            os.remove(tmp_path)
+        except Exception:
+            pass
+    progress.empty()
+    st.success(f"Extracted text from {file_count} files.")
+    # Combine texts with small separators (retain filename metadata)
+    merged_text = "\n\n".join([f"---\nSource: {name}\n---\n{text}" for name, text in combined_texts])
+    st.info("Chunking combined text...")
+    chunks = chunk_text(merged_text)
     st.success(f"Chunked into {len(chunks)} pieces.")
+    st.info("Creating vector store (this may take a short while)...")
+    vstore = create_vector_store(chunks)
+    st.success("Vector store ready.")
+    # update session
+    st.session_state["vector_store"] = vstore
+    # store list of files processed
+    st.session_state["uploaded_files"] = [f.name for f in file_objs]
+    return vstore
 
-    st.info("Creating vector store (may take a minute)...")
-    vector_store = create_vector_store(chunks)
-    st.success("Vector store ready!")
+if process_btn and uploaded_files:
+    try:
+        # process immediately
+        process_pdf_files(uploaded_files)
+    except Exception as e:
+        st.error(f"Error while processing files: {e}")
 
-    st.session_state['vector_store'] = vector_store
+# Rebuild index if asked and we have previous uploaded files in session
+if rebuild_btn and st.session_state.get("uploaded_files"):
+    st.info("Rebuilding vector store from previously uploaded files...")
+    # note: we don't have the original UploadedFile objects anymore; ask user to re-upload
+    st.warning("Please re-upload the original PDF files into the uploader to rebuild the index.")
+    # we don't auto-rebuild because Streamlit's UploadedFile objects are ephemeral
 
-# Only show Q&A if vector store is ready
-if 'vector_store' in st.session_state:
-    st.markdown("---")
-    st.subheader("Ask questions about your PDF")
+# ---------- Q&A / Interaction Card ----------
+st.markdown("<div style='height:18px;'></div>", unsafe_allow_html=True)
+st.markdown("<div class='lm-card'>", unsafe_allow_html=True)
+st.markdown("<div class='section-title'>💬 Ask Askly</div>", unsafe_allow_html=True)
 
-    # Custom input with arrow button
-    col1, col2 = st.columns([8, 1])
-    with col1:
-        user_question = st.text_input(
-            "Type your question:",
-            key="user_question",
-            label_visibility="collapsed"
-        )
-    with col2:
-        submit = st.button("➡️")
+if st.session_state.get("vector_store") is None:
+    st.info("Upload PDFs and build the index first to start asking questions.")
+else:
+    qcol1, qcol2 = st.columns([8,1])
+    with qcol1:
+        user_question = st.text_input("Type your question about the uploaded documents", key="user_question", label_visibility="collapsed")
+    with qcol2:
+        ask_btn = st.button("➡️ Ask")
 
-    # If user presses arrow or Enter
-    if submit and st.session_state['user_question']:
-        st.session_state['is_generating'] = True
-        with st.spinner('Hang there, generating answer...'):
-            llm = ChatGroq(api_key=GROQ_API_KEY, model="llama-3.3-70b-versatile", temperature=0)
-            qa = RetrievalQA.from_chain_type(
-                llm=llm,
-                chain_type="stuff",
-                retriever=st.session_state['vector_store'].as_retriever()
-            )
+    if st.session_state["is_generating"]:
+        st.warning("⏳ Askly is generating an answer...")
 
-            # ⏱️ Measure query response time
-            t0 = time.perf_counter()
-            answer = qa.invoke(st.session_state['user_question'])
-            t1 = time.perf_counter()
+    if ask_btn and user_question:
+        st.session_state["is_generating"] = True
+        with st.spinner("⏳ Generating answer..."):
+            try:
+                llm = ChatGroq(api_key=GROQ_API_KEY, model="llama-3.3-70b-versatile", temperature=0)
+                qa = RetrievalQA.from_chain_type(
+                    llm=llm,
+                    chain_type="stuff",
+                    retriever=st.session_state["vector_store"].as_retriever()
+                )
+                t0 = time.perf_counter()
+                answer = qa.invoke(user_question)
+                t1 = time.perf_counter()
+                response_time = t1 - t0
+                answer_str = answer.get("result") if isinstance(answer, dict) else str(answer)
+                st.session_state["chat_history"].append({
+                    "question": user_question,
+                    "answer": answer_str,
+                    "time": response_time
+                })
+                st.session_state["timings"].append(response_time)
+            except Exception as e:
+                st.error(f"Error generating answer: {e}")
+            finally:
+                st.session_state["is_generating"] = False
+                # reset text input in UI
+                try:
+                    st.session_state.pop("user_question")
+                except Exception:
+                    pass
+                st.rerun()
 
-            response_time = t1 - t0
-            st.write(f"⏱️ Response time: {response_time:.2f} seconds")
+# ---------- Display chat history ----------
+st.markdown("</div>", unsafe_allow_html=True)
+st.markdown("<div style='height:14px;'></div>", unsafe_allow_html=True)
 
-            # Store timings for summary stats
-            st.session_state['timings'].append(response_time)
+if st.session_state["chat_history"]:
+    st.markdown("<div class='lm-card'>", unsafe_allow_html=True)
+    st.markdown("<div class='section-title'>🧾 Conversation</div>", unsafe_allow_html=True)
 
-            answer_str = answer["result"]
-            st.session_state['chat_history'].append({
-                "question": st.session_state['user_question'],
-                "answer": answer_str,
-                "time": response_time
-            })
-
-        st.session_state['is_generating'] = False
-        st.session_state.pop("user_question")
-        st.markdown("<script>window.location.reload();</script>", unsafe_allow_html=True)
-
-    # Display chat history
-    for chat in reversed(st.session_state['chat_history']):
+    for i, chat in enumerate(reversed(st.session_state["chat_history"])):
+        # unique ids for copy widgets
+        answer_id = f"lm-answer-{i}"
+        copy_id = f"lm-copy-{i}"
+        feedback_id = f"lm-feedback-{i}"
         st.markdown(f"""
-        <div style='background-color:#1976D2; border-radius:12px; padding:1em; margin-bottom:1em; 
-                    box-shadow: 0 2px 8px #0002; color:white;'>
-            <b style='color:#FFC107;'>You:</b> {chat['question']}<br><br>
-            <b style='color:#00E676;'>NoteMate:</b><br>
-            <div style='font-size:1.1em;'>{chat['answer']}</div>
-            <div style='font-size:0.9em;color:#ccc;'>⏱️ {chat['time']:.2f}s</div>
+        <div style='margin-bottom:12px; position:relative;'>
+            <div class='lm-bubble-user'>{chat['question']}</div>
+            <div style='height:8px;'></div>
+            <div class='lm-bubble-assistant' id='{answer_id}'>{chat['answer']}</div>
+            <button id="{copy_id}" style="position:absolute; right:6px; top:6px; background:transparent; border:none; color:#9be7ff; cursor:pointer;"
+                onclick="
+                    const t = document.getElementById('{answer_id}').innerText;
+                    navigator.clipboard.writeText(t).then(() => {{
+                        const fb = document.getElementById('{feedback_id}');
+                        fb.style.opacity = 1;
+                        setTimeout(() => {{ fb.style.opacity = 0; }}, 1600);
+                    }});
+                ">📋
+            </button>
+            <div id="{feedback_id}" class='copy-feedback' style='position:absolute; right:6px; top:32px;'>Copied!</div>
+            <div style='margin-top:6px; font-size:12px; color:rgba(255,255,255,0.38);'>⏱ {chat['time']:.2f}s</div>
         </div>
         """, unsafe_allow_html=True)
 
-    # Show summary stats after multiple queries
-    if len(st.session_state['timings']) > 3:
-        arr = np.array(st.session_state['timings'])
+    # Performance summary (if available)
+    if len(st.session_state["timings"]) >= 1:
+        arr = np.array(st.session_state["timings"])
+        st.markdown("---")
         st.markdown("### 📊 Performance Summary")
         st.write(
-            f"- Average response: {arr.mean():.2f}s\n"
-            f"- Median response: {np.median(arr):.2f}s\n"
+            f"- Average response: {arr.mean():.2f}s  \n"
+            f"- Median response: {np.median(arr):.2f}s  \n"
             f"- 95th percentile: {np.percentile(arr,95):.2f}s"
         )
+
+    st.markdown("</div>", unsafe_allow_html=True)
+
+# ---------- Footer ----------
+st.markdown("<div style='height:18px;'></div>", unsafe_allow_html=True)
+st.markdown("<div class='muted'>Askly · Dark Futuristic · Built with Streamlit and Groq LLM</div>", unsafe_allow_html=True)

@@ -10,3 +10,5 @@ faiss-cpu
 sentence-transformers
 python-dotenv
 pydantic
+fpdf
+pyperclip
