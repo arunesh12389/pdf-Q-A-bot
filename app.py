@@ -8,7 +8,7 @@ from pydantic import SecretStr
 from typing import List
 from utils import extract_text_from_pdf, chunk_text, create_vector_store
 from langchain_groq import ChatGroq
-from langchain_community.chains import RetrievalQA
+from langchain.chains import RetrievalQA
 from langchain_core.documents import Document
 
 load_dotenv()

@@ -3,7 +3,6 @@ openai
 PyMuPDF
 tqdm
 langchain==0.1.17
-langchain-community==0.0.36
 langchain-groq==0.0.1
 langchain-text-splitters==0.0.1
 faiss-cpu==1.7.4
