@@ -6,10 +6,10 @@ langchain==0.1.17
 langchain-community==0.0.36
 langchain-groq==0.0.1
 langchain-text-splitters==0.0.1
-faiss-cpu
-sentence-transformers
+faiss-cpu==1.7.4
+sentence-transformers==2.2.2
 python-dotenv
 pydantic
 fpdf
 pyperclip
-numpy==1.26.4
+numpy==1.25.2
