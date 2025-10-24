@@ -232,6 +232,48 @@ st.markdown("<div style='height:18px;'></div>", unsafe_allow_html=True)
 st.markdown("<div class='lm-card'>", unsafe_allow_html=True)
 st.markdown("<div class='section-title'>💬 Ask Askly</div>", unsafe_allow_html=True)
 
+def create_retrieval_chain(retriever, llm):
+    """
+    Create a small adapter around RetrievalQA that exposes an `invoke` method
+    accepting {"input": "<question>"} to keep compatibility with the rest of the app.
+    The adapter will try several call patterns on the underlying chain to be
+    tolerant of different versions of langchain-style chains.
+    """
+    qa = RetrievalQA(llm=llm, retriever=retriever)
+
+    class QAChainAdapter:
+        def __init__(self, qa_chain):
+            self.qa_chain = qa_chain
+
+        def invoke(self, params):
+            # accept either {"input": "<question>"} or a plain string
+            query = params.get("input") if isinstance(params, dict) else params
+
+            # Try direct invoke if available
+            if hasattr(self.qa_chain, "invoke"):
+                try:
+                    return self.qa_chain.invoke({"input": query})
+                except Exception:
+                    pass
+
+            # Try run(...) which often returns a string answer
+            if hasattr(self.qa_chain, "run"):
+                try:
+                    result = self.qa_chain.run(query)
+                    return {"answer": result} if isinstance(result, str) else result
+                except Exception:
+                    pass
+
+            # Try calling the chain as a callable
+            try:
+                result = self.qa_chain(query)
+                return {"answer": result} if isinstance(result, str) else result
+            except Exception as e:
+                # Re-raise a clearer error for troubleshooting
+                raise RuntimeError("Failed to invoke underlying QA chain") from e
+
+    return QAChainAdapter(qa)
+
 if st.session_state.get("vector_store") is None:
     st.info("Upload PDFs and build the index first to start asking questions.")
 else:
