@@ -1,3 +1,5 @@
+import sentence_transformers
+from sentence_transformers import SentenceTransformer 
 import streamlit as st
 import tempfile
 import os
