@@ -12,3 +12,5 @@ pydantic
 fpdf
 pyperclip
 numpy==1.25.2
+transformers==4.33.2
+
