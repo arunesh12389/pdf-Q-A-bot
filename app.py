@@ -1,15 +1,15 @@
-# lmntix_app.py
 import streamlit as st
-from utils import extract_text_from_pdf, chunk_text, create_vector_store
-from langchain_groq import ChatGroq
-from langchain.chains import RetrievalQA
 import tempfile
 import os
-from dotenv import load_dotenv
-from pydantic import SecretStr
 import time
 import numpy as np
+from dotenv import load_dotenv
+from pydantic import SecretStr
 from typing import List
+from utils import extract_text_from_pdf, chunk_text, create_vector_store
+from langchain_groq import ChatGroq
+from langchain_community.chains import RetrievalQA
+from langchain_core.documents import Document
 
 load_dotenv()
 api_key = os.getenv("GROQ_API_KEY")
@@ -249,16 +249,16 @@ else:
         with st.spinner("⏳ Generating answer..."):
             try:
                 llm = ChatGroq(api_key=GROQ_API_KEY, model="llama-3.3-70b-versatile", temperature=0)
-                qa = RetrievalQA.from_chain_type(
-                    llm=llm,
-                    chain_type="stuff",
-                    retriever=st.session_state["vector_store"].as_retriever()
-                )
+                retriever = st.session_state["vector_store"].as_retriever()
+                qa_chain = create_retrieval_chain(retriever, llm)
+
                 t0 = time.perf_counter()
-                answer = qa.invoke(user_question)
+                response = qa_chain.invoke({"input": user_question})
                 t1 = time.perf_counter()
+
                 response_time = t1 - t0
-                answer_str = answer.get("result") if isinstance(answer, dict) else str(answer)
+                answer_str = response.get("answer") if isinstance(response, dict) else str(response)
+
                 st.session_state["chat_history"].append({
                     "question": user_question,
                     "answer": answer_str,
